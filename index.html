@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Ultra Viral Love Filter</title>
+
+<style>
+
+body{
+margin:0;
+overflow:hidden;
+background:black;
+font-family:sans-serif;
+}
+
+canvas{
+position:absolute;
+top:0;
+left:0;
+}
+
+video{
+position:absolute;
+right:10px;
+bottom:10px;
+width:220px;
+opacity:0.4;
+border-radius:10px;
+}
+
+button{
+position:absolute;
+bottom:20px;
+left:20px;
+padding:12px 20px;
+font-size:18px;
+border:none;
+border-radius:10px;
+background:#ff3366;
+color:white;
+cursor:pointer;
+}
+
+</style>
+</head>
+
+<body>
+
+<video id="video" autoplay playsinline></video>
+<canvas id="canvas"></canvas>
+<button id="recordBtn">Record</button>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+
+<script>
+
+const video=document.getElementById("video");
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
+const recordBtn=document.getElementById("recordBtn");
+
+canvas.width=window.innerWidth;
+canvas.height=window.innerHeight;
+
+let particles=[];
+let message="";
+
+let recorder;
+let chunks=[];
+
+async function setupCamera(){
+
+const stream=await navigator.mediaDevices.getUserMedia({video:true});
+video.srcObject=stream;
+
+const canvasStream=canvas.captureStream(30);
+
+recorder=new MediaRecorder(canvasStream);
+
+recorder.ondataavailable=e=>chunks.push(e.data);
+
+recorder.onstop=e=>{
+const blob=new Blob(chunks,{type:"video/webm"});
+const url=URL.createObjectURL(blob);
+window.open(url);
+};
+
+return new Promise(resolve=>{
+video.onloadedmetadata=()=>resolve(video);
+});
+
+}
+
+recordBtn.onclick=()=>{
+
+if(recorder.state==="inactive"){
+chunks=[];
+recorder.start();
+recordBtn.innerText="Stop";
+}else{
+recorder.stop();
+recordBtn.innerText="Record";
+}
+
+};
+
+class Particle{
+
+constructor(x,y){
+
+this.x=x;
+this.y=y;
+
+this.size=Math.random()*6+2;
+
+this.angle=Math.random()*Math.PI*2;
+this.speed=Math.random()*3+1;
+
+this.life=220;
+
+this.color=`hsl(${Math.random()*360},100%,60%)`;
+
+}
+
+update(){
+
+this.angle+=0.05;
+
+this.x+=Math.cos(this.angle)*this.speed;
+this.y+=Math.sin(this.angle)*this.speed;
+
+this.life--;
+
+}
+
+draw(){
+
+ctx.shadowColor=this.color;
+ctx.shadowBlur=25;
+
+ctx.fillStyle=this.color;
+
+ctx.beginPath();
+ctx.arc(this.x,this.y,this.size,0,Math.PI*2);
+ctx.fill();
+
+ctx.shadowBlur=0;
+
+}
+
+}
+
+function createParticles(x,y){
+
+for(let i=0;i<80;i++){
+particles.push(new Particle(x,y));
+}
+
+}
+
+function heartShape(){
+
+let cx=canvas.width/2;
+let cy=canvas.height/2;
+
+for(let t=0;t<Math.PI*2;t+=0.07){
+
+let x=16*Math.pow(Math.sin(t),3);
+let y=13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t);
+
+particles.push(new Particle(cx+x*15,cy-y*15));
+
+}
+
+}
+
+function heartRain(){
+
+for(let i=0;i<20;i++){
+particles.push(new Particle(Math.random()*canvas.width,-20));
+}
+
+}
+
+function vortex(x,y){
+
+for(let i=0;i<50;i++){
+
+let p=new Particle(x,y);
+p.speed=4;
+p.angle=i;
+
+particles.push(p);
+
+}
+
+}
+
+function drawMessage(){
+
+ctx.fillStyle="white";
+ctx.font="70px Arial";
+ctx.textAlign="center";
+
+ctx.fillText(message,canvas.width/2,120);
+
+}
+
+function animate(){
+
+ctx.fillStyle="rgba(0,0,0,0.15)";
+ctx.fillRect(0,0,canvas.width,canvas.height);
+
+particles.forEach((p,i)=>{
+
+p.update();
+p.draw();
+
+if(p.life<0){
+particles.splice(i,1);
+}
+
+});
+
+drawMessage();
+
+requestAnimationFrame(animate);
+
+}
+
+function detectGesture(l){
+
+let index=l[8];
+let middle=l[12];
+
+let dist=Math.abs(index[0]-middle[0]);
+
+if(dist<25) return "love";
+
+if(dist>40 && Math.abs(index[1]-middle[1])<20) return "peace";
+
+return "open";
+
+}
+
+async function main(){
+
+await setupCamera();
+
+const model=await handpose.load();
+
+animate();
+
+setInterval(async()=>{
+
+const predictions=await model.estimateHands(video);
+
+if(predictions.length>0){
+
+let l=predictions[0].landmarks;
+
+let x=l[9][0];
+let y=l[9][1];
+
+createParticles(x,y);
+
+let g=detectGesture(l);
+
+if(g==="love"){
+
+message="LOVE ❤️";
+heartShape();
+
+}
+
+if(g==="peace"){
+
+message="I LOVE YOU ❤️";
+vortex(x,y);
+
+}
+
+if(g==="open"){
+
+message="I ALWAYS WANT TO BE WITH YOU ❤️";
+heartRain();
+
+}
+
+}
+
+},40);
+
+}
+
+main();
+
+</script>
+
+</body>
+</html>
